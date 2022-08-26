@@ -38,7 +38,11 @@ abstract contract TestHelper is Test {
         assertEq(token.owner(), address(this));
     }
 
+    event Transfer(address indexed _from, address indexed _to, uint256 _value);
+
     function testMint() public {
+        vm.expectEmit(true, true, true, true, address(token));
+        emit Transfer(address(0), alice, 2e18);
         token.mint(alice, 2e18);
         assertEq(token.totalSupply(), token.balanceOf(alice));
     }
@@ -47,13 +51,19 @@ abstract contract TestHelper is Test {
         token.mint(alice, 10e18);
         assertEq(token.balanceOf(alice), 10e18);
 
+        vm.expectEmit(true, true, true, true, address(token));
+        emit Transfer(alice, address(0), 8e18);
         token.burn(alice, 8e18);
 
         assertEq(token.totalSupply(), 2e18);
         assertEq(token.balanceOf(alice), 2e18);
     }
 
+    event Approval(address indexed _owner, address indexed _spender, uint256 _value);
+
     function testApprove() public {
+        vm.expectEmit(true, true, true, true, address(token));
+        emit Approval(address(this), alice, 1e18);
         assertTrue(token.approve(alice, 1e18));
         assertEq(token.allowance(address(this), alice), 1e18);
     }
