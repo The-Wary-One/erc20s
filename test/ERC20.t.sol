@@ -2,6 +2,7 @@
 pragma solidity ^0.8.15;
 
 import { Test, console2 } from "forge-std/Test.sol";
+import { HuffDeployer } from "huff-language/HuffDeployer.sol";
 
 import { ERC20 } from "src/ERC20.sol";
 import { YulDeployer } from "./lib/YulDeployer.sol";
@@ -251,8 +252,27 @@ contract ERC20YulTest is Test, TestHelper {
         bytes memory constructorArgs = abi.encode(name, symbol);
 
         // Need to delegatecall so token owner is address(this)
-        (bool success, bytes memory b) = address(yulDeployer).delegatecall(abi.encodeCall(yulDeployer.deployContract, ("ERC20", constructorArgs)));
+        (bool success, bytes memory b) = address(yulDeployer)
+            .delegatecall(abi.encodeCall(yulDeployer.deployContract, ("ERC20", constructorArgs)));
         require(success);
         return ERC20(abi.decode(b, (address)));
+    }
+}
+
+contract ERC20HuffTest is Test, TestHelper {
+
+    function deployToken(string memory name, string memory symbol) internal override returns (ERC20) {
+        address addr = HuffDeployer
+            .config()
+            .with_args(abi.encode(name, symbol))
+            .deploy("huff/ERC20");
+        return ERC20(addr);
+    }
+
+    function testStorage() external {
+        console2.logBytes(address(token).code);
+        console2.logBytes32(vm.load(address(token), bytes32(uint256(0x00))));
+        console2.logBytes32(vm.load(address(token), bytes32(uint256(0x01))));
+        assertEq(uint256(vm.load(address(token), 0)), 0x12345);
     }
 }

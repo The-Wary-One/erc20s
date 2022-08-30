@@ -1,0 +1,123 @@
+/* --- ABI --- */
+#define function transferFrom(address, address, uint256) nonpayable returns (bool)
+#define function approve(address, uint256) nonpayable returns (bool)
+#define function transfer(address, uint256) nonpayable returns (bool)
+
+#define function mint(address, uint256) nonpayable returns ()
+#define function burn(address, uint256) nonpayable returns ()
+
+#define function name() view returns (string memory)
+#define function symbol() view returns (string memory)
+#define function decimals() pure returns (uint256)
+#define function totalSupply() view returns (uint256)
+#define function owner() view returns (address)
+#define function balanceOf(address) view returns (uint256)
+#define function allowance(address, address) view returns (uint256)
+
+#define event Transfer(address indexed from, address indexed to, uint256 value)
+#define event Approval(address indexed owner, address indexed spender, uint256 value)
+
+/* --- Storage Slots --- */
+#define constant NAME_SLOT = FREE_STORAGE_POINTER()
+#define constant SYMBOL_SLOT = FREE_STORAGE_POINTER()
+#define constant TOTAL_SUPPLY_SLOT = FREE_STORAGE_POINTER()
+#define constant OWNER_SLOT = FREE_STORAGE_POINTER()
+#define constant BALANCE_OF_SLOT = FREE_STORAGE_POINTER()
+#define constant ALLOWANCE_SLOT = FREE_STORAGE_POINTER()
+
+/* --- Constructor --- */
+#define macro CONSTRUCTOR() = takes(0) returns(0) {
+    // Constructor args are appended to the contract's code
+    // We trust the calldata is correct
+    // example: name = "Token", symbol = "TK"
+    // name offset => nbArgs * 0x20 bytes because it's the first dynamic length argument
+    // 0000000000000000000000000000000000000000000000000000000000000040
+    // symbol offset => (nbArgs + (name.len / 0x20) + 0x1 + 0x1) * 0x20
+    // 0000000000000000000000000000000000000000000000000000000000000080
+    // name len
+    // 0000000000000000000000000000000000000000000000000000000000000005
+    // name data
+    // 546f6b656e000000000000000000000000000000000000000000000000000000
+    // symbol len
+    // 0000000000000000000000000000000000000000000000000000000000000002
+    // symbol data
+    // 544b000000000000000000000000000000000000000000000000000000000000
+
+    // Calculate the constructor arguments size
+    //FIXME: should be dynamic
+    0xc0                           // [argsSize] - size of the constructor arguments
+    // Get the creation code size
+    dup1 codesize sub              // [creationCodeSize, argsSize] - size of the creation code without the arguments
+    // Copy encoded args to memory
+    returndatasize codecopy        // []
+
+    0x20                                             // [0x20]
+    // Store name arg to slot 0
+    dup1 [NAME_SLOT] STORE_MEM_STRING_ARG_TO_SLOT()    // [0x20]
+    // Store symbol arg to slot 1
+    [SYMBOL_SLOT] STORE_MEM_STRING_ARG_TO_SLOT()       // []
+    // Store caller to slot 3
+    caller [OWNER_SLOT] sstore
+
+    // Huffc inject the boilerplate code to return the MAIN macro when CONSTRUCTOR has no return
+}
+
+/* --- Storage Helper Macros --- */
+#define fn STORE_MEM_STRING_ARG_TO_SLOT() = takes(2) returns(0) {
+    // Input Stack:                // [argIndex, 0x20]
+    swap1                          // [0x20, argIndex]
+    // Get the string len offset
+    dup2 dup2 mul mload            // [offset, 0x20, argIndex] - offset of the string length in memory
+    // Load the arg len
+    dup1 mload                     // [length, offset, 0x20, argIndex] - length of the string in memory
+
+    // If length < 32, we can pack the entire string and its length in the slot
+    dup3 dup2 lt packed jumpi      // [length, offset, 0x20, argIndex]
+
+    // Else Non Packed
+    // Store len * 2 + 1 at slot
+    dup1 0x01 shl 0x01 add         // [doubledLenPlus1, length, offset, 0x20, argIndex]
+    dup5 sstore                    // [length, offset, 0x20, argIndex]
+    // Store string data starting keccak256(slot)
+    swap3                          // [argIndex, offset, 0x20, length]
+    returndatasize mstore          // [offset, 0x20, length]
+    dup2 dup1 returndatasize sha3  // [startingSlot, 0x20, offset, 0x20, length]
+    // How many words are needed to store the string ? len / 32 + 1
+    // Add 1 more for the loop condition below
+    swap4 div 0x02 add             // [neededWordsLimit, offset, 0x20, startingSlot]
+    swap2 add                      // [offsetWithoutLen, neededWordsLimit, startingSlot]
+    returndatasize                 // [i, offsetWithoutLen, neededWordsLimit, startingSlot]
+
+    // Loop to store all string data words starting at the keccak256(slot)
+    loopOverStringData:
+    // Load the string data word i onto the stack
+    dup1 0x20 mul dup3 add mload   // [data, i, offsetWithoutLen, neededWordsLimit, startingSlot]
+    // Store the data at the startingSlot + i slot
+    dup5 dup3 add sstore           // [i, offsetWithoutLen, neededWordsLimit, startingSlot]
+    // Loop if we still have some string data
+    0x01 add                       // [++i, offsetWithoutLen, neededWordsLimit, startingSlot]
+    dup3 dup2 lt loopOverStringData jumpi
+    // Clean stack
+    pop pop pop pop                // []
+    // Exit function
+    leaveMemStringFn jump
+
+    // If Packed
+    packed:
+    // Double the string length
+    0x01 shl                       // [doubledLength, offset, 0x20, argIndex]
+    // Load the string data onto the stack
+    swap2 add mload                // [string, doubledLength, argIndex]
+    // Add to it (i.e. append) the doubled length
+    add                            // [packedString, argIndex]
+    // Store it to its slot
+    swap1 sstore                   // []
+
+    // Exit function
+    leaveMemStringFn:
+}
+
+/* --- Main --- */
+#define macro MAIN() = takes(0) returns(0) {
+    0x00 0x00 revert
+}
