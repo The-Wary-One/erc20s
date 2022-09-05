@@ -18,12 +18,14 @@
 #define event Approval(address indexed owner, address indexed spender, uint256 value)
 
 /* --- Storage Slots --- */
-#define constant NAME_SLOT = FREE_STORAGE_POINTER()
-#define constant SYMBOL_SLOT = FREE_STORAGE_POINTER()
-#define constant TOTAL_SUPPLY_SLOT = FREE_STORAGE_POINTER()
-#define constant OWNER_SLOT = FREE_STORAGE_POINTER()
-#define constant BALANCE_OF_SLOT = FREE_STORAGE_POINTER()
-#define constant ALLOWANCE_SLOT = FREE_STORAGE_POINTER()
+#define constant NAME_SLOT = 0x00
+#define constant SYMBOL_SLOT = 0x01
+#define constant TOTAL_SUPPLY_SLOT = 0x02
+#define constant OWNER_SLOT = 0x03
+#define constant BALANCE_OF_SLOT = 0x04
+#define constant ALLOWANCE_SLOT = 0x05
+
+#define jumptable DUMMY_TABLE {}
 
 /* --- Constructor --- */
 #define macro CONSTRUCTOR() = takes(0) returns(0) {
@@ -44,74 +46,74 @@
     // 544b000000000000000000000000000000000000000000000000000000000000
 
     // Calculate the constructor arguments size
-    //FIXME: should be dynamic
-    0xc0                           // [argsSize] - size of the constructor arguments
+    __codesize(MAIN) __tablestart(DUMMY_TABLE) add // [argsPos]
+    codesize sub                   // [argsSize] - size of the constructor arguments
     // Get the creation code size
     dup1 codesize sub              // [creationCodeSize, argsSize] - size of the creation code without the arguments
     // Copy encoded args to memory
     returndatasize codecopy        // []
 
-    0x20                                             // [0x20]
+    0x20                                            // [0x20]
     // Store name arg to slot 0
-    dup1 [NAME_SLOT] STORE_MEM_STRING_ARG_TO_SLOT()    // [0x20]
+    dup1 [NAME_SLOT] STORE_MEM_STRING_ARG_TO_SLOT() // [0x20]
     // Store symbol arg to slot 1
-    [SYMBOL_SLOT] STORE_MEM_STRING_ARG_TO_SLOT()       // []
+    [SYMBOL_SLOT] STORE_MEM_STRING_ARG_TO_SLOT()    // []
     // Store caller to slot 3
     caller [OWNER_SLOT] sstore
 
-    // Huffc inject the boilerplate code to return the MAIN macro when CONSTRUCTOR has no return
+    __codesize(MAIN) dup1 __tablestart(DUMMY_TABLE) returndatasize codecopy
+    returndatasize return
 }
 
 /* --- Storage Helper Macros --- */
-#define fn STORE_MEM_STRING_ARG_TO_SLOT() = takes(2) returns(0) {
+#define macro STORE_MEM_STRING_ARG_TO_SLOT() = takes(2) returns(0) {
     // Input Stack:                // [argIndex, 0x20]
     swap1                          // [0x20, argIndex]
     // Get the string len offset
-    dup2 dup2 mul mload            // [offset, 0x20, argIndex] - offset of the string length in memory
+    dup2 0x05 shl mload            // [offset, 0x20, argIndex] - offset of the string length in memory
     // Load the arg len
     dup1 mload                     // [length, offset, 0x20, argIndex] - length of the string in memory
 
     // If length < 32, we can pack the entire string and its length in the slot
     dup3 dup2 lt packed jumpi      // [length, offset, 0x20, argIndex]
 
-    // Else Non Packed
-    // Store len * 2 + 1 at slot
-    dup1 0x01 shl 0x01 add         // [doubledLenPlus1, length, offset, 0x20, argIndex]
-    dup5 sstore                    // [length, offset, 0x20, argIndex]
-    // Store string data starting keccak256(slot)
-    swap3                          // [argIndex, offset, 0x20, length]
-    returndatasize mstore          // [offset, 0x20, length]
-    dup2 dup1 returndatasize sha3  // [startingSlot, 0x20, offset, 0x20, length]
-    // How many words are needed to store the string ? len / 32 + 1
-    // Add 1 more for the loop condition below
-    swap4 div 0x02 add             // [neededWordsLimit, offset, 0x20, startingSlot]
-    swap2 add                      // [offsetWithoutLen, neededWordsLimit, startingSlot]
-    returndatasize                 // [i, offsetWithoutLen, neededWordsLimit, startingSlot]
+        // Else Non Packed
+        // Store len * 2 + 1 at slot
+        dup1 0x01 shl 0x01 add         // [doubledLenPlus1, length, offset, 0x20, argIndex]
+        dup5 sstore                    // [length, offset, 0x20, argIndex]
+        // Store string data starting keccak256(slot)
+        swap3                          // [argIndex, offset, 0x20, length]
+        returndatasize mstore          // [offset, 0x20, length]
+        dup2 dup1 returndatasize sha3  // [startingSlot, 0x20, offset, 0x20, length]
+        // How many words are needed to store the string ? len / 32 + 1
+        swap4 div 0x01 add             // [neededWordsLimit, offset, 0x20, startingSlot]
+        swap2 add                      // [offsetWithoutLen, neededWordsLimit, startingSlot]
+        returndatasize                 // [i, offsetWithoutLen, neededWordsLimit, startingSlot]
 
-    // Loop to store all string data words starting at the keccak256(slot)
-    loopOverStringData:
-    // Load the string data word i onto the stack
-    dup1 0x20 mul dup3 add mload   // [data, i, offsetWithoutLen, neededWordsLimit, startingSlot]
-    // Store the data at the startingSlot + i slot
-    dup5 dup3 add sstore           // [i, offsetWithoutLen, neededWordsLimit, startingSlot]
-    // Loop if we still have some string data
-    0x01 add                       // [++i, offsetWithoutLen, neededWordsLimit, startingSlot]
-    dup3 dup2 lt loopOverStringData jumpi
-    // Clean stack
-    pop pop pop pop                // []
-    // Exit function
-    leaveMemStringFn jump
+        // Loop to store all string data words starting at the keccak256(slot)
+        loopOverStringData:
+            // Load the string data word i onto the stack
+            dup1 0x05 shl dup3 add mload   // [data, i, offsetWithoutLen, neededWordsLimit, startingSlot]
+            // Store the data at the startingSlot + i slot
+            dup5 dup3 add sstore           // [i, offsetWithoutLen, neededWordsLimit, startingSlot]
+            // Loop if we still have some string data
+            0x01 add                       // [++i, offsetWithoutLen, neededWordsLimit, startingSlot]
+            dup3 dup2 lt loopOverStringData jumpi
+        // Clean stack
+        pop pop pop pop                // []
+        // Exit function
+        leaveMemStringFn jump
 
     // If Packed
     packed:
-    // Double the string length
-    0x01 shl                       // [doubledLength, offset, 0x20, argIndex]
-    // Load the string data onto the stack
-    swap2 add mload                // [string, doubledLength, argIndex]
-    // Add to it (i.e. append) the doubled length
-    add                            // [packedString, argIndex]
-    // Store it to its slot
-    swap1 sstore                   // []
+        // Double the string length
+        0x01 shl                       // [doubledLength, offset, 0x20, argIndex]
+        // Load the string data onto the stack
+        swap2 add mload                // [string, doubledLength, argIndex]
+        // Add to it (i.e. append) the doubled length
+        add                            // [packedString, argIndex]
+        // Store it to its slot
+        swap1 sstore                   // []
 
     // Exit function
     leaveMemStringFn:
@@ -119,5 +121,354 @@
 
 /* --- Main --- */
 #define macro MAIN() = takes(0) returns(0) {
-    0x00 0x00 revert
+    // Extract the called function by getting the first 4 bytes of calldata
+    returndatasize calldataload 0xe0 shr // [selector]
+
+    // Dispatcher
+    // Case ordering is important for gas optimisations
+    // Actions
+    dup1 __FUNC_SIG(transferFrom) eq transferFrom jumpi
+    dup1 __FUNC_SIG(approve) eq approve jumpi
+    dup1 __FUNC_SIG(transfer) eq transfer jumpi
+    // Authorized actions
+    dup1 __FUNC_SIG(mint) eq mint jumpi
+    dup1 __FUNC_SIG(burn) eq burn jumpi
+    // Getter functions
+    dup1 __FUNC_SIG(name) eq name jumpi
+    dup1 __FUNC_SIG(symbol) eq symbol jumpi
+    dup1 __FUNC_SIG(decimals) eq decimals jumpi
+    dup1 __FUNC_SIG(totalSupply) eq totalSupply jumpi
+    dup1 __FUNC_SIG(owner) eq owner jumpi
+    dup1 __FUNC_SIG(balanceOf) eq balanceOf jumpi
+    dup1 __FUNC_SIG(allowance) eq allowance jumpi
+
+    returndatasize returndatasize revert
+
+    transferFrom:
+        // Check the calldata size: address, address, uint256
+        0x64 CHECK_CALLDATASIZE()
+        // Get arguments
+        0x44 calldataload          // [amount]
+        0x24 DECODE_AS_ADDRESS()   // [to, amount]
+        0x04 DECODE_AS_ADDRESS()   // [from, to, amount]
+        // Check underflow
+        dup3 caller dup3           // [from, caller, amount, from, to, amount]
+        SAFE_SUB_ALLOWANCE()       // [from, to, amount]
+        TRANSFER()
+        0x01 RETURN_UINT()
+
+    approve:
+        // Check the calldata size: address, uint256
+        0x44 CHECK_CALLDATASIZE()
+        // Get arguments
+        0x24 calldataload          // [amount]
+        0x04 DECODE_AS_ADDRESS()   // [spender, amount]
+        APPROVE()
+        0x01 RETURN_UINT()
+
+    transfer:
+        // Check the calldata size: address, uint256
+        0x44 CHECK_CALLDATASIZE()
+        // Get arguments
+        0x24 calldataload          // [amount]
+        0x04 DECODE_AS_ADDRESS()   // [to, amount]
+        caller                     // [from, to, amount]
+        TRANSFER()
+        0x01 RETURN_UINT()
+
+    mint:
+        // Check only owner can call this action
+        REQUIRE_CALLED_BY_OWNER()
+        // Check the calldata size
+        0x44 CHECK_CALLDATASIZE()
+        // Get arguments
+        0x24 calldataload          // [amount]
+        0x04 DECODE_AS_ADDRESS()   // [to, amount]
+        MINT()
+        RETURN_NOTHING()
+
+    burn:
+        // Check only owner can call this action
+        REQUIRE_CALLED_BY_OWNER()
+        // Check the calldata size
+        0x44 CHECK_CALLDATASIZE()
+        // Get arguments
+        0x24 calldataload          // [amount]
+        0x04 DECODE_AS_ADDRESS()   // [from, amount]
+        BURN()
+        RETURN_NOTHING()
+
+    name:
+        [NAME_SLOT] RETURN_STORAGE_STRING()
+
+    symbol:
+        [SYMBOL_SLOT] RETURN_STORAGE_STRING()
+
+    decimals:
+        0x12 RETURN_UINT()
+
+    totalSupply:
+        TOTAL_SUPPLY() RETURN_UINT()
+
+    owner:
+        OWNER() RETURN_UINT()
+
+    balanceOf:
+        // Check the calldata size
+        0x24 CHECK_CALLDATASIZE()
+        // Get arguments
+        0x04 calldataload          // [address]
+        BALANCE_OF() RETURN_UINT()
+
+    allowance:
+        // Check the calldata size
+        0x44 CHECK_CALLDATASIZE()
+        // Get arguments
+        0x24 calldataload          // [spender]
+        0x04 calldataload          // [from]
+        ALLOWANCE() RETURN_UINT()
+}
+
+/* --- Actions Macros --- */
+#define macro TRANSFER() = takes(3) returns(0) {
+    // Input stack:                 // [from, to, amount]
+    // Check underflow
+    dup3 dup2 SAFE_SUB_BALANCE_OF() // [from, to, amount]
+    // Cannot overflow here
+    dup3 dup3 ADD_BALANCE_OF()      // [from, to, amount]
+    // Emit Transfer event
+    EMIT_TRANSFER()
+}
+
+#define macro APPROVE() = takes(2) returns(0) {
+    // Input stack:                  // [spender, amount]
+    dup2 dup2 caller SET_ALLOWANCE() // [spender, amount]
+    caller EMIT_APPROVAL()           // []
+}
+
+/* --- Authorized Actions Macros --- */
+#define macro MINT() = takes(2) returns(0) {
+    // Input stack:                // [to, amount]
+    // Check overflow
+    dup2 TOTAL_SUPPLY() SAFE_ADD() // [newSupply, to, amount]
+    SET_TOTAL_SUPPLY()             // [to, amount]
+    // Add to balanceOf cannot overflow if setTotalSupply did not overflow
+    dup2 dup2 ADD_BALANCE_OF()     // [to, amount]
+    // Emit Transfer event
+    returndatasize EMIT_TRANSFER() // []
+}
+
+#define macro BURN() = takes(2) returns(0) {
+    // Input stack:                // [from, amount]
+    // Sub to balance
+    // Check underflow
+    dup2 dup2 SAFE_SUB_BALANCE_OF()// [from, amount]
+    // Cannot underflow here
+    dup2 TOTAL_SUPPLY() sub        // [newSupply, from, amount]
+    SET_TOTAL_SUPPLY()             // [from, amount]
+    // Emit Transfer event
+    returndatasize swap1           // [from, 0x00, amount]
+    EMIT_TRANSFER()                // []
+}
+
+#define macro REQUIRE_CALLED_BY_OWNER() = takes(0) returns(0) {
+    OWNER() caller eq              // [isCalledByOwner]
+    REQUIRE()
+}
+
+/* --- Calldata Decoding/Sanitization Macros --- */
+#define macro DECODE_AS_ADDRESS() = takes(1) returns(1) {
+    // We don't trust the input data
+    // We check a is a valid uint160 value
+    // Input stack:                      // [offset]
+    calldataload                         // [value]
+    0xffffffffffffffffffffffffffffffffffffffff
+    dup2 lt REQUIRE()                    // [address]
+}
+
+#define macro CHECK_CALLDATASIZE() = takes(1) returns(0) {
+    // We don't trust the input data
+    // Input stack:                      // [expectedSize]
+    calldatasize eq REQUIRE()
+}
+
+/* --- Calldata Encoding Macros --- */
+#define macro RETURN_UINT() = takes(1) returns(0) {
+    // Input stack:                // [v]
+    returndatasize mstore          // []
+    0x20 returndatasize return
+}
+
+#define macro RETURN_NOTHING() = takes(0) returns(0) {
+    returndatasize returndatasize return
+}
+
+#define macro RETURN_STORAGE_STRING() = takes(1) returns(0) {
+    // Abi encoded string memory layout
+    // example: "Token"
+    // offset => nbArgs * 0x20 bytes because it's the first dynamic length argument
+    // 0x00 => 0x0000000000000000000000000000000000000000000000000000000000000020
+    // length
+    // 0x20 => 0x0000000000000000000000000000000000000000000000000000000000000005
+    // string data
+    // 0x40 => 0x546f6b656e000000000000000000000000000000000000000000000000000000
+
+    // Input stack:                          // [slot]
+    0x20                                     // [0x20, slot]
+    // Store offset in memory
+    dup1 returndatasize mstore               // [0x20, slot]
+    // Load the data at slot
+    dup2 sload                               // [slotData, 0x20, slot]
+    // Check if the string data is stored in the slot by checking if the last bit is 0
+    dup1 0x01 and notPackedStr jumpi         // [slotData, 0x20, slot]
+
+        // Else Packed
+        // Store length in memory = last slot data byte / 2 (i.e. shr 1); (max = 31)
+        swap1 dup2 0xff and 0x01 shr         // [length, 0x20, slotData, slot]
+        swap1 mstore                         // [slotData, slot]
+        // Clean the last data byte (length) in memory
+        0xff not and                         // [cleanedData, slot]
+        // Store data in memory
+        0x40 mstore                          // [slot]
+        // Return the starting memory pointer and size
+        0x60 returndatasize return
+
+    // If Not Packed
+    notPackedStr:
+        // Load string data starting keccak256(slot)
+        swap2 dup2 mstore                    // [0x20, slotData]
+        dup1 dup1 sha3                       // [startingSlot, 0x20, slotData]
+        // Store length in memory = slot data / 2 - 1 (i.e. shr 1)
+        swap2 0x01 shr                       // [length, 0x20, startingSlot]
+        dup1 swap2 mstore                    // [length, startingSlot]
+        // How many words are needed to store the string ? len / 32 + 1
+        0x05 shr 0x01 add                    // [neededWords, startingSlot]
+
+        // Load all data words starting at the keccak256(slot)
+        returndatasize                       // [i, neededWords, startingSlot]
+        loopOverStrData:
+            // Load the string data word onto memory
+            dup3 dup2 add sload              // [data, i, neededWords, startingSlot]
+            dup2 0x05 shl 0x40 add mstore    // [i, neededWords, startingSlot]
+
+            0x01 add                         // [i++, neededWords, startingSlot]
+            dup2 dup2 lt loopOverStrData jumpi
+
+        pop 0x05 shl 0x40 add returndatasize return
+}
+
+/* --- Event Macros --- */
+#define macro EMIT_TRANSFER() = takes(3) returns(0) {
+    // To log an event we must abi.encode the non indexed args in the data entry
+    // In t1 we push the event.
+    // Then add the bytes32 value or keccak256 hash of each indexed arg in a topic
+    //
+    // example: emit Transfer(address indexed from, address indexed to, uint256 value)
+    // data: value in memory
+    // t1: keccak256("Transfer(address,address,uint256)")
+    // t2: from
+    // t3: to
+    // Input stack:                                 // [from, to, value]
+    dup3 returndatasize mstore                      // [from, to, value]
+    __EVENT_HASH(Transfer) 0x20 returndatasize log3 // [value]
+    pop
+}
+
+#define macro EMIT_APPROVAL() = takes(3) returns(0) {
+    // Input stack:                                 // [from, spender, value]
+    dup3 returndatasize mstore                      // [from, spender, value]
+    __EVENT_HASH(Approval) 0x20 returndatasize log3 // [value]
+    pop
+}
+
+/* --- Storage Access Macros --- */
+#define macro TOTAL_SUPPLY() = takes(0) returns(1) {
+    [TOTAL_SUPPLY_SLOT] sload
+}
+
+#define macro OWNER() = takes(0) returns(1) {
+    [OWNER_SLOT] sload
+}
+
+#define macro BALANCE_OF() = takes(1) returns(1) {
+    // Input stack:                // [of]
+    [BALANCE_OF_SLOT] GET_MAPPING_VALUE_OFFSET() sload
+}
+
+#define macro ALLOWANCE() = takes(2) returns(1) {
+    // Input stack:                // [from, spender]
+    [ALLOWANCE_SLOT] GET_NESTED_MAPPING_VALUE_OFFSET() sload
+}
+
+#define macro SET_TOTAL_SUPPLY() = takes(1) returns(0) {
+    // Input stack:                // [newSupply]
+    [TOTAL_SUPPLY_SLOT] sstore     // []
+}
+
+#define macro ADD_BALANCE_OF() = takes(2) returns(0) {
+    // Input stack:                              // [to, value]
+    [BALANCE_OF_SLOT] GET_MAPPING_VALUE_OFFSET() // [offset, value]
+    swap1 dup2 sload add                         // [newBalance, offset]
+    swap1 sstore                                 // []
+}
+
+#define macro SAFE_SUB_BALANCE_OF() = takes(2) returns(0) {
+    // Input stack:                              // [from, value]
+    [BALANCE_OF_SLOT] GET_MAPPING_VALUE_OFFSET() // [offset, value]
+    swap1 dup2 sload SAFE_SUB()                  // [newBalance, offset]
+    swap1 sstore                                 // []
+}
+
+#define macro SET_ALLOWANCE() = takes(3) returns(0) {
+    // Input stack:                                    // [from, spender, amount]
+    [ALLOWANCE_SLOT] GET_NESTED_MAPPING_VALUE_OFFSET() // [offset, amount]
+    sstore                                             // []
+}
+
+#define macro SAFE_SUB_ALLOWANCE() = takes(3) returns(0) {
+    // Input stack:                                    // [from, spender, amount]
+    [ALLOWANCE_SLOT] GET_NESTED_MAPPING_VALUE_OFFSET() // [offset, amount]
+    swap1 dup2 sload SAFE_SUB()                        // [newAllowance, offset]
+    swap1 sstore                                       // []
+}
+
+#define macro GET_MAPPING_VALUE_OFFSET() = takes(2) returns(1) {
+    // We assume here key is a value type
+    // We can get a mapping value position in storage by doing keccak256(valueTypeKey.concat(mappingSlot))
+    // Input stack:                // [slot, key]
+    swap1 returndatasize mstore    // [slot]
+    0x20 mstore                    // []
+    0x40 returndatasize sha3       // [offset]
+}
+
+#define macro GET_NESTED_MAPPING_VALUE_OFFSET() = takes(3) returns(1) {
+    // We assume here keys are value types
+    // We can get a nested mapping value position in storage by doing keccak256(valueTypeSecondKey.concat(keccak256(valueTypeFirstKey.concat(mappingSlot))))
+    // Input stack:                // [slot, firstKey, secondKey]
+    GET_MAPPING_VALUE_OFFSET()     // [offset, secondKey]
+    GET_MAPPING_VALUE_OFFSET()     // [nestedOffset]
+}
+
+/* --- Utility Macros --- */
+#define macro REQUIRE() = takes(1) returns(0) {
+    // Input stack:                // [condition]
+    isTrue jumpi
+    // Else
+    returndatasize returndatasize revert
+
+    isTrue:
+}
+
+#define macro SAFE_ADD() = takes(2) returns(1) {
+    // Input stack:                // [a, b]
+    dup2 add                       // [c, b]
+    // Check overflow
+    swap1 dup2 lt iszero REQUIRE() // [c]
+}
+
+#define macro SAFE_SUB() = takes(2) returns(1) {
+    // Input stack:                // [a, b]
+    swap1 dup2 sub                 // [c, a]
+    // Check underflow
+    swap1 dup2 gt iszero REQUIRE() // [c]
 }

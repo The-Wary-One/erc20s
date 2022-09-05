@@ -67,9 +67,8 @@ object "ERC20" {
             // How many words are needed to store the string ? len / 32 + 1
             let neededWords := add(div(len, 0x20), 0x01)
             // Store all data words starting at the keccak256(slot)
-            let stopAt := add(neededWords, 0x01)
             let offsetWithoutLen := add(offset, 0x20)
-            for { let i := 0x00 } lt(i, stopAt) { i := add(i, 0x01) } {
+            for { let i := 0x00 } lt(i, neededWords) { i := add(i, 0x01) } {
                 // Load the string data word onto the stack
                 let data := mload(add(offsetWithoutLen, mul(i, 0x20)))
                 sstore(add(startingDataSlot, i), data)
@@ -84,6 +83,7 @@ object "ERC20" {
             // Dispatcher
             switch selector
             // Case ordering is important for gas optimisations
+            // Actions
             case 0x23b872dd /* "transferFrom(address,address,uint256)" */ {
                 transferFrom(decodeAsAddress(0), decodeAsAddress(1), decodeAsUint(2))
                 returnTrue()
@@ -96,7 +96,6 @@ object "ERC20" {
                 transfer(caller(), decodeAsAddress(0), decodeAsUint(1))
                 returnTrue()
             }
-            // Actions
             // Authorized actions
             case 0x40c10f19 /* "mint(address,uint256)" */ {
                 // Check only owner can call this action
@@ -167,10 +166,11 @@ object "ERC20" {
             }
 
             function burn(from, amount) {
-                // Check underflow
-                setTotalSupply(safeSub(totalSupply(), amount))
                 // Sub to balanceOf
-                subBalanceOf(from, amount)
+                // Check underflow
+                safeSubBalanceOf(from, amount)
+                // Cannot underflow here
+                setTotalSupply(sub(totalSupply(), amount))
                 // Emit Transfer event
                 emitTransfer(from, 0x00, amount)
             }
@@ -190,7 +190,7 @@ object "ERC20" {
                 a := decodeAsUint(offset)
                 // We don't trust the input data
                 // We check a is a valid uint160 value
-                require(eq(a, and(a, 0xffffffffffffffffffffffffffffffffffffffff)))
+                require(lt(a, 0xffffffffffffffffffffffffffffffffffffffff))
             }
 
             /* --- calldata encoding functions --- */
@@ -334,11 +334,6 @@ object "ERC20" {
             function addBalanceOf(to, value) {
                 let valuePos := getMappingValuePos(balanceOfSlot(), to)
                 sstore(valuePos, add(sload(valuePos), value))
-            }
-
-            function subBalanceOf(to, value) {
-                let valuePos := getMappingValuePos(balanceOfSlot(), to)
-                sstore(valuePos, sub(sload(valuePos), value))
             }
 
             // Code duplication = more expensive to deploy but cheaper in execution

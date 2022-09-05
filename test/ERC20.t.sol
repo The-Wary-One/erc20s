@@ -2,10 +2,10 @@
 pragma solidity ^0.8.15;
 
 import { Test, console2 } from "forge-std/Test.sol";
-import { HuffDeployer } from "huff-language/HuffDeployer.sol";
 
 import { ERC20 } from "src/ERC20.sol";
 import { YulDeployer } from "./lib/YulDeployer.sol";
+import { HuffConfig } from "./lib/HuffDeployer.sol";
 
 abstract contract TestHelper is Test {
 
@@ -33,6 +33,10 @@ abstract contract TestHelper is Test {
 
     function testSymbol() external {
         assertEq(token.symbol(), tokenSymbol);
+    }
+
+    function testDecimals() external {
+        assertEq(token.decimals(), 18);
     }
 
     function testOwner() external {
@@ -262,17 +266,14 @@ contract ERC20YulTest is Test, TestHelper {
 contract ERC20HuffTest is Test, TestHelper {
 
     function deployToken(string memory name, string memory symbol) internal override returns (ERC20) {
-        address addr = HuffDeployer
-            .config()
-            .with_args(abi.encode(name, symbol))
-            .deploy("huff/ERC20");
+        HuffConfig config = new HuffConfig();
+        (bool success, bytes memory b) = address(config)
+            .delegatecall(abi.encodeCall(
+                config.deployWithArgs,
+                ("huff/ERC20", abi.encode(name, symbol))
+        ));
+        require(success);
+        address addr = abi.decode(b, (address));
         return ERC20(addr);
-    }
-
-    function testStorage() external {
-        console2.logBytes(address(token).code);
-        console2.logBytes32(vm.load(address(token), bytes32(uint256(0x00))));
-        console2.logBytes32(vm.load(address(token), bytes32(uint256(0x01))));
-        assertEq(uint256(vm.load(address(token), 0)), 0x12345);
     }
 }
