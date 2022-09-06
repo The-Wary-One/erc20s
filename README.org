@@ -1,16 +1,16 @@
 #+title: ERC20 contracts done in Solidity, Yul and Huff
 #+author: Wary
 
-One of the best ways to improve as a Smart Contracts Developer is to learn how the `EVM` works. After reading [[https://twitter.com/jtriley_eth][Jtriley]]'s [[https://medium.com/@jtriley15/huff-vs-yul-for-evm-smart-contracts-620d1d618197][Huff vs Yul]] article, i wanted to write small `ERC20` token contracts in `Solidity`, `Yul` and `Huff` as a more complex exercise (i.e. bigger contract with dynamic length string constructor arguments).
+One of the best ways to improve as a Smart Contracts Developer is to learn how the =EVM= works. After reading [[https://twitter.com/jtriley_eth][Jtriley]]'s [[https://medium.com/@jtriley15/huff-vs-yul-for-evm-smart-contracts-620d1d618197][Huff vs Yul]] article, i wanted to write small =ERC20= token contracts in =Solidity=, =Yul= and =Huff= as a more complex exercise (i.e. bigger contract with dynamic length string constructor arguments).
 This is for learning purposes only, they are not optimized !
 
 
 * 🌍 Overview
 
-This is a [[https://getfoundry.sh/][foundry]] project so i could write the spec tests in `Solidity` and reuse them for the `Yul` and `Huff` contracts. I also used customized `Huff` and `Yul` deployer contracts.
-- The Solidity contract found in `src/ERC20.sol`, serves as the reference `ERC20` spec implementation.
-- The `Yul` contract can be found in `yul/ERC20.yul`.
-- The `Huff` contract is at `src/huff/ERC20.huff`.
+This is a [[https://getfoundry.sh/][foundry]] project so i could write the spec tests in =Solidity= and reuse them for the =Yul= and =Huff= contracts. I also used customized =Huff= and =Yul= deployer contracts.
+- The Solidity contract found in =src/ERC20.sol=, serves as the reference =ERC20= spec implementation.
+- The =Yul= contract can be found in =yul/ERC20.yul=.
+- The =Huff= contract is at =src/huff/ERC20.huff=.
 
 
 * 🚚 How to install
