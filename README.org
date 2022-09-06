@@ -7,7 +7,7 @@ This is for learning purposes only, they are not optimized !
 
 * 🌍 Overview
 
-This is a [[][foundry]] project so i could write the spec tests in `Solidity` and reuse them for the `Yul` and `Huff` contracts. I also used customized `Huff` and `Yul` deployer contracts.
+This is a [[https://getfoundry.sh/][foundry]] project so i could write the spec tests in `Solidity` and reuse them for the `Yul` and `Huff` contracts. I also used customized `Huff` and `Yul` deployer contracts.
 - The Solidity contract found in `src/ERC20.sol`, serves as the reference `ERC20` spec implementation.
 - The `Yul` contract can be found in `yul/ERC20.yul`.
 - The `Huff` contract is at `src/huff/ERC20.huff`.
